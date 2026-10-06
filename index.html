@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta name="theme-color" content="#0b1220"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<title>English Phrase Bank</title>
+<link rel="manifest" href="manifest.json"/>
+<link rel="icon" href="icon.svg"/>
+<style>
+:root {
+  --bg: #eef3f8;
+  --card: #fff;
+  --text: #122033;
+  --muted: #5b6b80;
+  --border: #d7e0ea;
+  --accent: #0f172a;
+  --accent-fg: #fff;
+  --nav: rgba(255,255,255,.92);
+}
+html.dark {
+  --bg: #0b1220;
+  --card: #111827;
+  --text: #e8eef7;
+  --muted: #94a3b8;
+  --border: #243044;
+  --accent: #3b82f6;
+  --accent-fg: #fff;
+  --nav: rgba(11,18,32,.94);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100dvh;
+  padding-bottom: 84px;
+}
+header {
+  position: sticky; top: 0; z-index: 20;
+  background: var(--nav); backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 16px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+header h1 { font-size: 16px; margin: 0; }
+header button { background: none; border: 1px solid var(--border); color: var(--text); border-radius: 10px; padding: 6px 10px; }
+main { max-width: 640px; margin: 0 auto; padding: 16px; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+h2 { font-size: 20px; margin: 0 0 4px; }
+.muted { color: var(--muted); font-size: 13px; }
+input, textarea, select, button { font: inherit; }
+input, textarea, select {
+  width: 100%; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--bg); color: var(--text);
+}
+textarea { min-height: 72px; resize: vertical; }
+label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+.btn {
+  border: 0; border-radius: 12px; padding: 12px 14px; font-weight: 600;
+  background: var(--accent); color: var(--accent-fg); width: 100%;
+}
+.btn.ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
+.row { display: flex; gap: 8px; }
+.row > * { flex: 1; }
+.bar { height: 8px; background: var(--border); border-radius: 99px; overflow: hidden; margin-top: 6px; }
+.bar i { display: block; height: 100%; background: #22c55e; }
+.bar.blue i { background: #3b82f6; }
+nav.bottom {
+  position: fixed; left: 0; right: 0; bottom: 0;
+  background: var(--nav); border-top: 1px solid var(--border);
+  display: flex; justify-content: space-around; padding: 8px 4px calc(8px + env(safe-area-inset-bottom));
+}
+nav.bottom button {
+  background: none; border: 0; color: var(--muted); font-size: 11px; display: flex; flex-direction: column; align-items: center; gap: 2px;
+}
+nav.bottom button.on { color: var(--text); font-weight: 700; }
+.pill { font-size: 11px; padding: 2px 8px; border-radius: 99px; background: #e2e8f0; color: #334155; }
+html.dark .pill { background: #1e293b; color: #e2e8f0; }
+.flip {
+  min-height: 220px; border-radius: 16px; border: 1px solid var(--border);
+  background: var(--card); padding: 18px; display: flex; flex-direction: column; justify-content: center;
+}
+ol { margin: 8px 0 0; padding-left: 18px; }
+.hidden { display: none !important; }
+.ok { color: #16a34a; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Phrase Bank</h1>
+  <button id="themeBtn" type="button">Theme</button>
+</header>
+<main id="app"></main>
+<nav class="bottom">
+  <button data-tab="home" class="on">Home</button>
+  <button data-tab="bank">Bank</button>
+  <button data-tab="add">Add</button>
+  <button data-tab="templates">Templates</button>
+  <button data-tab="cards">Cards</button>
+  <button data-tab="errors">Errors</button>
+</nav>
+<script>
+const KEY = "epb-v1";
+const GOALS = { templates: 3, cards: 5 };
+const today = () => new Date().toISOString().slice(0, 10);
+
+function load() {
+  const raw = localStorage.getItem(KEY);
+  if (raw) {
+    try { return JSON.parse(raw); } catch {}
+  }
+  return {
+    theme: "dark",
+    phrases: [],
+    cards: [],
+    errors: [
+      { id: id(), name: "Preposition", total: 0, days: {} },
+      { id: id(), name: "Tense", total: 0, days: {} },
+      { id: id(), name: "Verb agreement", total: 0, days: {} },
+      { id: id(), name: "Clause", total: 0, days: {} }
+    ],
+    daily: {}
+  };
+}
+function save() { localStorage.setItem(KEY, JSON.stringify(state)); }
+function id() { return Math.random().toString(36).slice(2, 10); }
+function dayBucket() {
+  const d = today();
+  if (!state.daily[d]) state.daily[d] = { templates: 0, cards: 0 };
+  return state.daily[d];
+}
+
+let state = load();
+let tab = "home";
+let selectedPhrase = null;
+let answers = ["", "", "", "", ""];
+let queue = [];
+let qIndex = 0;
+let flipped = false;
+let cardFilter = "all";
+
+function applyTheme() {
+  document.documentElement.classList.toggle("dark", state.theme === "dark");
+}
+applyTheme();
+
+document.getElementById("themeBtn").onclick = () => {
+  state.theme = state.theme === "dark" ? "light" : "dark";
+  save(); applyTheme();
+};
+
+document.querySelectorAll("nav.bottom button").forEach((b) => {
+  b.onclick = () => {
+    tab = b.dataset.tab;
+    selectedPhrase = null;
+    flipped = false;
+    render();
+  };
+});
+
+function render() {
+  document.querySelectorAll("nav.bottom button").forEach((b) => {
+    b.classList.toggle("on", b.dataset.tab === tab);
+  });
+  const app = document.getElementById("app");
+  if (tab === "home") app.innerHTML = viewHome();
+  if (tab === "bank") app.innerHTML = viewBank();
+  if (tab === "add") app.innerHTML = viewAdd();
+  if (tab === "templates") app.innerHTML = viewTemplates();
+  if (tab === "cards") app.innerHTML = viewCards();
+  if (tab === "errors") app.innerHTML = viewErrors();
+  bind();
+}
+
+function viewHome() {
+  const d = dayBucket();
+  return `
+    <h2>Today</h2>
+    <p class="muted">Works offline. Data stays on this phone.</p>
+    <div class="card">
+      <strong>Templates ${d.templates}/${GOALS.templates}</strong>
+      <div class="bar"><i style="width:${Math.min(100, d.templates / GOALS.templates * 100)}%"></i></div>
+      <p class="muted">3 sessions · 15 sentences</p>
+    </div>
+    <div class="card">
+      <strong>Flashcards ${d.cards}/${GOALS.cards}</strong>
+      <div class="bar blue"><i style="width:${Math.min(100, d.cards / GOALS.cards * 100)}%"></i></div>
+      <p class="muted">Create or review 5</p>
+    </div>
+    <div class="card">
+      <p>${state.phrases.length} phrases · ${state.cards.length} flashcards</p>
+      ${d.templates >= 3 && d.cards >= 5 ? '<p class="ok">Daily goals done.</p>' : ""}
+    </div>`;
+}
+
+function viewBank() {
+  const q = (document.getElementById("q")?.value || "").toLowerCase();
+  const list = state.phrases.filter((p) => !q || p.phrase.toLowerCase().split(/\s+/).some((w) => w.startsWith(q)) || p.phrase.toLowerCase().startsWith(q) || p.meaning.toLowerCase().startsWith(q));
+  return `
+    <h2>Phrase bank</h2>
+    <input id="q" placeholder="Type a letter — finds words that start with it" value="${esc(q)}"/>
+    <div style="height:10px"></div>
+    ${list.map((p) => `<div class="card"><strong>${esc(p.phrase)}</strong><div class="muted">${esc(p.meaning)}</div><div class="muted">${esc(p.type)}</div></div>`).join("") || '<p class="muted">No phrases yet.</p>'}`;
+}
+
+function viewAdd() {
+  return `
+    <h2>Add</h2>
+    <p class="muted">One phrase, or paste many from ChatGPT.</p>
+    <div class="card">
+      <label>Phrase / chunk</label>
+      <input id="phrase"/>
+      <label>Meaning</label>
+      <textarea id="meaning"></textarea>
+      <label>Type</label>
+      <select id="type"><option value="chunk">Chunk</option><option value="collocation">Collocation</option></select>
+      <div style="height:10px"></div>
+      <button class="btn" id="saveOne">Save phrase</button>
+    </div>
+    <div class="card">
+      <label>Bulk paste (phrase - meaning, one per line, or commas)</label>
+      <textarea id="bulk" placeholder="take part in - participate in"></textarea>
+      <div style="height:10px"></div>
+      <button class="btn" id="saveBulk">Add all</button>
+    </div>`;
+}
+
+function viewTemplates() {
+  if (!selectedPhrase) {
+    return `
+      <h2>Templates</h2>
+      <p class="muted">Pick a chunk, write any five sentences, get one flashcard.</p>
+      ${state.phrases.map((p) => `<button class="card" style="width:100%;text-align:left" data-pick="${p.id}"><strong>${esc(p.phrase)}</strong><div class="muted">${esc(p.meaning)}</div></button>`).join("") || '<p class="muted">Add a phrase first.</p>'}`;
+  }
+  const labels = ["First sentence", "Second sentence", "Third sentence", "Fourth sentence", "Fifth sentence"];
+  return `
+    <h2>${esc(selectedPhrase.phrase)}</h2>
+    <p class="muted">Write any five sentences you want. They become one flashcard.</p>
+    ${labels.map((label, i) => `<div class="card"><strong>${label}</strong><textarea data-ans="${i}" placeholder="Any sentence using this phrase">${esc(answers[i])}</textarea></div>`).join("")}
+    <button class="btn" id="finishTemplate">Finish → one flashcard</button>
+    <div style="height:8px"></div>
+    <button class="btn ghost" id="backPick">Choose another phrase</button>`;
+}
+
+function viewCards() {
+  const d = dayBucket();
+  const list = state.cards.filter((c) => cardFilter === "all" || c.source === cardFilter);
+  if (queue.length && tab === "cards" && document.getElementById("reviewing")?.dataset.on === "1") {
+    return reviewView();
+  }
+  return `
+    <h2>Flashcards</h2>
+    <p class="muted">Today ${d.cards}/${GOALS.cards}. Template cards: phrase title + 5 sentences. Manual: your mistake and the correct form.</p>
+    <div class="row">
+      <button class="btn" id="startReview">Review</button>
+      <button class="btn ghost" id="dlPhotos">Gallery photos</button>
+    </div>
+    <div style="height:10px"></div>
+    <div class="card">
+      <strong>Create mine</strong>
+      <label>Your mistake</label>
+      <textarea id="mistake"></textarea>
+      <label>Correct / natural form</label>
+      <textarea id="correct"></textarea>
+      <div style="height:8px"></div>
+      <button class="btn" id="saveManual">Add flashcard</button>
+    </div>
+    <div class="row" style="margin-bottom:8px">
+      <button class="btn ghost" data-filter="all">All</button>
+      <button class="btn ghost" data-filter="template">Template</button>
+      <button class="btn ghost" data-filter="manual">Manual</button>
+    </div>
+    ${list.map((c) => `<div class="card"><span class="pill">${c.source}</span><div><strong>${esc(c.front)}</strong></div><div class="muted">${c.sentences ? c.sentences.map((s,i)=>`${i+1}. ${esc(s)}`).join("<br>") : esc(c.back)}</div></div>`).join("") || '<p class="muted">No cards yet.</p>'}`;
+}
+
+function reviewView() {
+  const c = queue[qIndex];
+  if (!c) return `<p class="muted">Done.</p><button class="btn" id="endReview">Back</button>`;
+  const body = flipped
+    ? (c.sentences?.length ? `<ol>${c.sentences.map((s) => `<li>${esc(s)}</li>`).join("")}</ol>` : `<p>${esc(c.back)}</p>`)
+    : `<p style="font-size:22px;font-weight:700">${esc(c.front)}</p><p class="muted">${c.source === "template" ? "Recall your five sentences" : "What is the correct form?"}</p>`;
+  return `
+    <p class="muted">${qIndex + 1} / ${queue.length} · ${c.source}</p>
+    <div class="flip" id="flip">${body}</div>
+    <p class="muted" style="text-align:center">Tap the card to flip</p>
+    ${flipped ? `<div class="row"><button class="btn ghost" data-grade="again">Again</button><button class="btn ghost" data-grade="good">Good</button><button class="btn" data-grade="easy">Easy</button></div>` : ""}
+    <div style="height:8px"></div>
+    <button class="btn ghost" id="endReview">End</button>
+    <span id="reviewing" data-on="1" class="hidden"></span>`;
+}
+
+function viewErrors() {
+  const d = today();
+  const todayTotal = state.errors.reduce((s, e) => s + (e.days[d] || 0), 0);
+  return `
+    <h2>Grammar errors</h2>
+    <p class="muted">Independent of phrases. Tap + when you make that mistake. Today: ${todayTotal}</p>
+    ${state.errors.map((e) => `<div class="card row" style="align-items:center"><div><strong>${esc(e.name)}</strong><div class="muted">Today ${e.days[d] || 0} · Total ${e.total}</div></div><button class="btn" data-plus="${e.id}" style="width:64px">+</button></div>`).join("")}
+    <div class="card">
+      <label>Add your own category</label>
+      <input id="newErr" placeholder="e.g. Adverb"/>
+      <div style="height:8px"></div>
+      <button class="btn" id="addErr">Add category</button>
+    </div>`;
+}
+
+function bind() {
+  const q = document.getElementById("q");
+  if (q) q.oninput = () => render();
+  const saveOne = document.getElementById("saveOne");
+  if (saveOne) saveOne.onclick = () => {
+    const phrase = document.getElementById("phrase").value.trim();
+    const meaning = document.getElementById("meaning").value.trim();
+    if (!phrase || !meaning) return alert("Phrase and meaning are required.");
+    state.phrases.unshift({ id: id(), phrase, meaning, type: document.getElementById("type").value, created: Date.now() });
+    save(); tab = "bank"; render();
+  };
+  const saveBulk = document.getElementById("saveBulk");
+  if (saveBulk) saveBulk.onclick = () => {
+    const items = parseBulk(document.getElementById("bulk").value);
+    if (!items.length) return alert("Nothing to add.");
+    items.forEach((it) => state.phrases.unshift({ id: id(), phrase: it.phrase, meaning: it.meaning, type: "chunk", created: Date.now() }));
+    save(); tab = "bank"; render();
+  };
+  document.querySelectorAll("[data-pick]").forEach((b) => {
+    b.onclick = () => {
+      selectedPhrase = state.phrases.find((p) => p.id === b.dataset.pick);
+      answers = ["", "", "", "", ""];
+      render();
+    };
+  });
+  document.querySelectorAll("[data-ans]").forEach((el) => {
+    el.oninput = () => { answers[Number(el.dataset.ans)] = el.value; };
+  });
+  const finish = document.getElementById("finishTemplate");
+  if (finish) finish.onclick = () => {
+    if (answers.some((a) => a.trim().length < 3)) return alert("Write all five sentences.");
+    state.cards.unshift({
+      id: id(),
+      source: "template",
+      front: selectedPhrase.phrase,
+      phraseText: selectedPhrase.phrase,
+      sentences: answers.map((a) => a.trim()),
+      back: answers.map((a, i) => `${i + 1}. ${a.trim()}`).join("\n"),
+      reviews: 0
+    });
+    dayBucket().templates += 1;
+    dayBucket().cards += 1;
+    save();
+    selectedPhrase = null;
+    tab = "cards";
+    alert("One flashcard saved with your five sentences.");
+    render();
+  };
+  const backPick = document.getElementById("backPick");
+  if (backPick) backPick.onclick = () => { selectedPhrase = null; render(); };
+  const startReview = document.getElementById("startReview");
+  if (startReview) startReview.onclick = () => {
+    queue = state.cards.slice();
+    if (!queue.length) return alert("No flashcards yet.");
+    qIndex = 0; flipped = false;
+    document.getElementById("app").innerHTML = reviewView();
+    bindReview();
+  };
+  const saveManual = document.getElementById("saveManual");
+  if (saveManual) saveManual.onclick = () => {
+    const front = document.getElementById("mistake").value.trim();
+    const back = document.getElementById("correct").value.trim();
+    if (!front || !back) return alert("Write the mistake and the correct form.");
+    state.cards.unshift({ id: id(), source: "manual", front, back, sentences: null, reviews: 0 });
+    dayBucket().cards += 1;
+    save(); render();
+  };
+  document.querySelectorAll("[data-filter]").forEach((b) => {
+    b.onclick = () => { cardFilter = b.dataset.filter; render(); };
+  });
+  const dl = document.getElementById("dlPhotos");
+  if (dl) dl.onclick = () => downloadPhotos();
+  document.querySelectorAll("[data-plus]").forEach((b) => {
+    b.onclick = () => {
+      const e = state.errors.find((x) => x.id === b.dataset.plus);
+      const d = today();
+      e.total += 1;
+      e.days[d] = (e.days[d] || 0) + 1;
+      save(); render();
+    };
+  });
+  const addErr = document.getElementById("addErr");
+  if (addErr) addErr.onclick = () => {
+    const name = document.getElementById("newErr").value.trim();
+    if (!name) return;
+    state.errors.push({ id: id(), name, total: 0, days: {} });
+    save(); render();
+  };
+}
+
+function bindReview() {
+  const flip = document.getElementById("flip");
+  if (flip) flip.onclick = () => { flipped = !flipped; document.getElementById("app").innerHTML = reviewView(); bindReview(); };
+  document.querySelectorAll("[data-grade]").forEach((b) => {
+    b.onclick = () => {
+      const c = queue[qIndex];
+      const stored = state.cards.find((x) => x.id === c.id);
+      if (stored) stored.reviews = (stored.reviews || 0) + 1;
+      dayBucket().cards += 1;
+      save();
+      qIndex += 1;
+      flipped = false;
+      if (qIndex >= queue.length) {
+        queue = [];
+        alert("Review session done.");
+        render();
+      } else {
+        document.getElementById("app").innerHTML = reviewView();
+        bindReview();
+      }
+    };
+  });
+  const end = document.getElementById("endReview");
+  if (end) end.onclick = () => { queue = []; render(); };
+}
+
+function parseBulk(raw) {
+  const text = raw.trim();
+  if (!text) return [];
+  const lines = text.includes("\n") ? text.split(/\n+/) : text.split(",");
+  const out = [];
+  for (let line of lines) {
+    line = line.trim().replace(/^\d+[\.\)]\s*/, "");
+    if (!line) continue;
+    const m = line.match(/^(.+?)\s*[-–—:|]\s*(.+)$/);
+    if (m) out.push({ phrase: m[1].trim(), meaning: m[2].trim() });
+    else out.push({ phrase: line, meaning: line });
+  }
+  return out;
+}
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&", "<": "<", ">": ">", '"': """ }[c]));
+}
+
+async function downloadPhotos() {
+  const cards = state.cards.filter((c) => cardFilter === "all" || c.source === cardFilter);
+  if (!cards.length) return alert("No flashcards to download.");
+  for (let i = 0; i < cards.length; i++) {
+    const blob = await drawCard(cards[i], i, cards.length);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `flashcard-${today()}-${String(i + 1).padStart(2, "0")}.png`;
+    a.click();
+    await new Promise((r) => setTimeout(r, 400));
+  }
+  alert("Photos downloaded. Open each PNG and save it to your gallery.");
+}
+
+function drawCard(card, index, total) {
+  return new Promise((resolve) => {
+    const W = 1080, H = 1920;
+    const canvas = document.createElement("canvas");
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    const g = ctx.createLinearGradient(0, 0, W, H);
+    g.addColorStop(0, "#0a1628");
+    g.addColorStop(1, "#123");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = "#38bdf8"; ctx.lineWidth = 8;
+    ctx.strokeRect(36, 36, W - 72, H - 72);
+    ctx.fillStyle = "#94a3b8"; ctx.font = "28px system-ui";
+    ctx.fillText("ENGLISH PHRASE BANK", 80, 110);
+    ctx.fillStyle = "#fff"; ctx.font = "bold 54px system-ui";
+    const title = card.phraseText || card.front;
+    wrap(ctx, title, 80, 220, W - 160, 64);
+    if (card.source === "template") {
+      const sentences = card.sentences || [];
+      let y = 460;
+      sentences.forEach((s, i) => {
+        ctx.fillStyle = "#3b82f6";
+        ctx.beginPath(); ctx.arc(110, y, 26, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#fff"; ctx.font = "bold 28px system-ui";
+        ctx.fillText(String(i + 1), 100, y + 10);
+        ctx.font = "34px system-ui";
+        y = wrap(ctx, s, 160, y - 8, W - 240, 44) + 40;
+      });
+    } else {
+      ctx.fillStyle = "#f87171"; ctx.font = "bold 32px system-ui";
+      ctx.fillText("MISTAKE", 80, 480);
+      ctx.fillStyle = "#fff"; ctx.font = "36px system-ui";
+      let y = wrap(ctx, card.front, 80, 540, W - 160, 46);
+      ctx.fillStyle = "#4ade80"; ctx.font = "bold 32px system-ui";
+      ctx.fillText("CORRECT", 80, y + 40);
+      ctx.fillStyle = "#fff"; ctx.font = "36px system-ui";
+      wrap(ctx, card.back, 80, y + 100, W - 160, 46);
+    }
+    ctx.fillStyle = "#64748b"; ctx.font = "24px system-ui";
+    ctx.fillText(`${index + 1} / ${total}`, 80, H - 80);
+    canvas.toBlob((blob) => resolve(blob), "image/png");
+  });
+}
+
+function wrap(ctx, text, x, y, max, lh) {
+  const words = String(text).split(/\s+/);
+  let line = "", cy = y;
+  for (const word of words) {
+    const test = line ? line + " " + word : word;
+    if (ctx.measureText(test).width > max && line) {
+      ctx.fillText(line, x, cy); cy += lh; line = word;
+    } else line = test;
+  }
+  if (line) { ctx.fillText(line, x, cy); cy += lh; }
+  return cy;
+}
+
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
+render();
+</script>
+</body>
+</html>
